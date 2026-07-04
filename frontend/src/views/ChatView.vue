@@ -65,6 +65,12 @@
 
       <!-- Input area -->
       <div class="input-dock">
+        <div class="kb-selector" v-if="knowledgeBases.length > 1">
+          <span class="kb-label">知识库:</span>
+          <select v-model="selectedKB" class="kb-select">
+            <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">{{ kb.name }}</option>
+          </select>
+        </div>
         <div class="input-container">
           <input
             v-model="inputText"
@@ -101,6 +107,8 @@ const inputText = ref("");
 const messagesRef = ref(null);
 const quickQuestions = ref([]);
 const particleCanvas = ref(null);
+const selectedKB = ref(null);
+const knowledgeBases = ref([]);
 
 // Particle network
 onMounted(() => {
@@ -173,6 +181,7 @@ onMounted(() => {
   }
   animate();
   loadQuickQuestions();
+  loadKnowledgeBases();
 });
 
 async function loadQuickQuestions() {
@@ -187,6 +196,21 @@ async function loadQuickQuestions() {
   }
 }
 
+async function loadKnowledgeBases() {
+  try {
+    const token = localStorage.getItem("token");
+    const { data } = await axios.get("/api/v1/kb/", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    knowledgeBases.value = data || [];
+    if (data.length > 0 && !selectedKB.value) {
+      selectedKB.value = data[0].id;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 async function sendQuick(q) {
   inputText.value = q;
   await handleSend();
@@ -196,7 +220,7 @@ async function handleSend() {
   const q = inputText.value.trim();
   if (!q) return;
   inputText.value = "";
-  await chatStore.sendMessage(q, 1);
+  await chatStore.sendMessage(q, selectedKB.value || 1);
 }
 </script>
 
@@ -347,6 +371,17 @@ async function handleSend() {
 .input-dock {
   padding: 16px 40px 24px; position: relative; z-index: 2;
 }
+.kb-selector {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-size: 12px; color: rgba(255,255,255,0.4);
+}
+.kb-label { font-family: 'Space Mono', monospace; letter-spacing: 1px; }
+.kb-select {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; padding: 6px 12px; color: #fff; font-size: 12px;
+  outline: none; cursor: pointer;
+}
+.kb-select option { background: #1a1d2e; color: #fff; }
 .input-container {
   display: flex; align-items: center; gap: 12px;
   background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);

@@ -9,7 +9,11 @@ http.interceptors.request.use((config) => {
 });
 
 export async function sendMessage(sessionId, kbId, query) {
-  const { data } = await http.post("/chat/", { session_id: sessionId, kb_id: kbId, query });
+  const payload = { session_id: sessionId, query };
+  if (kbId) {
+    payload.kb_id = kbId;
+  }
+  const { data } = await http.post("/chat/", payload);
   return data;
 }
 
