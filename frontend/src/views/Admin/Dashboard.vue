@@ -38,6 +38,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { listKBs } from "../../api/kb";
+import axios from "axios";
 
 const stats = ref({ kbCount: 0, docCount: 0, chatCount: 0 });
 
@@ -45,6 +46,16 @@ onMounted(async () => {
   const kbs = await listKBs();
   stats.value.kbCount = kbs.length;
   stats.value.docCount = kbs.reduce((sum, kb) => sum + kb.document_count, 0);
+
+  try {
+    const token = localStorage.getItem("token");
+    const { data } = await axios.get("/api/v1/logs/stats", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    stats.value.chatCount = data.total_messages || 0;
+  } catch (e) {
+    console.error("Failed to load chat stats:", e);
+  }
 });
 </script>
 
