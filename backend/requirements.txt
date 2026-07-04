@@ -16,3 +16,6 @@ python-docx>=1.0.0
 
 # Agent tools (optional)
 # openai>=1.0.0
+
+# Cache (optional)
+redis>=5.0.0

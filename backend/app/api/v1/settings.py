@@ -24,6 +24,7 @@ class SettingsUpdate(BaseModel):
     max_answer_length: int | None = None
     llm_model: str | None = None
     embedding_model: str | None = None
+    max_upload_size_mb: int | None = None
 
 
 class SettingsOut(BaseModel):
@@ -37,6 +38,7 @@ class SettingsOut(BaseModel):
     llm_provider: str
     embedding_model: str
     embedding_models: list[str]
+    max_upload_size_mb: int
     quick_questions: list[str]
 
 
@@ -61,6 +63,7 @@ def get_settings(user=Depends(get_current_user)):
         llm_provider=settings.LLM_PROVIDER,
         embedding_model=settings.EMBEDDING_MODEL,
         embedding_models=EMBEDDING_MODELS,
+        max_upload_size_mb=settings.MAX_UPLOAD_SIZE_MB,
         quick_questions=QUICK_QUESTIONS,
     )
 
@@ -83,6 +86,8 @@ def update_settings(body: SettingsUpdate, user=Depends(get_current_user)):
         settings.LLM_MODEL = body.llm_model
     if body.embedding_model is not None:
         settings.EMBEDDING_MODEL = body.embedding_model
+    if body.max_upload_size_mb is not None:
+        settings.MAX_UPLOAD_SIZE_MB = body.max_upload_size_mb
 
     return SettingsOut(
         chunk_size=settings.CHUNK_SIZE,
@@ -95,5 +100,6 @@ def update_settings(body: SettingsUpdate, user=Depends(get_current_user)):
         llm_provider=settings.LLM_PROVIDER,
         embedding_model=settings.EMBEDDING_MODEL,
         embedding_models=EMBEDDING_MODELS,
+        max_upload_size_mb=settings.MAX_UPLOAD_SIZE_MB,
         quick_questions=QUICK_QUESTIONS,
     )

@@ -160,3 +160,60 @@ def export_logs(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=chat_logs.csv"},
     )
+
+
+@router.get("/analytics")
+def get_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取对话数据分析"""
+    user_filter = ChatLog.user_id == current_user.id if current_user.role != "admin" else True
+
+    # 总体统计
+    total_messages = db.query(ChatLog).filter(user_filter).count()
+    user_messages = db.query(ChatLog).filter(user_filter, ChatLog.role == "user").count()
+    total_sessions = db.query(ChatLog.session_id).filter(user_filter).distinct().count()
+
+    # 热门问题（用户消息中出现频率最高的关键词）
+    user_logs = db.query(ChatLog.content).filter(user_filter, ChatLog.role == "user").all()
+    word_freq = {}
+    for (content,) in user_logs:
+        words = content.split()
+        for word in words:
+            if len(word) > 1:
+                word_freq[word] = word_freq.get(word, 0) + 1
+    top_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # 按天统计消息量
+    daily_stats = {}
+    all_logs = db.query(ChatLog.created_at).filter(user_filter).all()
+    for (created_at,) in all_logs:
+        if created_at:
+            day = created_at.strftime("%Y-%m-%d")
+            daily_stats[day] = daily_stats.get(day, 0) + 1
+
+    return {
+        "total_messages": total_messages,
+        "user_messages": user_messages,
+        "total_sessions": total_sessions,
+        "top_words": [{"word": w, "count": c} for w, c in top_words],
+        "daily_stats": [{"date": d, "count": c} for d, c in sorted(daily_stats.items())],
+    }
+
+
+@router.delete("/cleanup")
+def cleanup_logs(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """清理过期日志"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="无权限")
+
+    from datetime import datetime, timedelta
+    cutoff = datetime.now() - timedelta(days=days)
+    deleted = db.query(ChatLog).filter(ChatLog.created_at < cutoff).delete()
+    db.commit()
+    return {"detail": f"已清理 {deleted} 条过期日志"}

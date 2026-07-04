@@ -31,3 +31,18 @@ export async function previewDoc(docId) {
   const { data } = await http.get(`/doc/${docId}/preview`);
   return data;
 }
+
+export async function getVersions(docId) {
+  const { data } = await http.get(`/doc/${docId}/versions`);
+  return data;
+}
+
+export async function rollbackDoc(docId, version) {
+  const { data } = await http.post(`/doc/${docId}/rollback?version=${version}`);
+  return data;
+}
+
+export async function getVectors(docId) {
+  const { data } = await http.get(`/doc/${docId}/vectors`);
+  return data;
+}

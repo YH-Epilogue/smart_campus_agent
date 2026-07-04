@@ -33,13 +33,18 @@ class UserOut(BaseModel):
 class KBCreate(BaseModel):
     name: str
     description: str = ""
+    department: str = ""
+    owner_name: str = ""
 
 
 class KBOut(BaseModel):
     id: int
     name: str
     description: str
+    department: str = ""
+    owner_name: str = ""
     owner_id: int | None
+    embedding_model: str = "shibing624/text2vec-base-chinese"
     created_at: datetime
     document_count: int = 0
 

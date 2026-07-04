@@ -8,11 +8,24 @@ from ..deps import get_db, get_current_user
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
 
+# 预定义角色
+ROLES = {
+    "admin": {"name": "超级管理员", "description": "拥有所有权限"},
+    "kb_admin": {"name": "知识库管理员", "description": "可管理知识库和文档"},
+    "user": {"name": "普通用户", "description": "仅可使用对话功能"},
+}
+
 
 class UserUpdate(BaseModel):
     username: str | None = None
     password: str | None = None
     role: str | None = None
+
+
+@router.get("/roles")
+def list_roles():
+    """获取角色列表"""
+    return [{"id": k, "name": v["name"], "description": v["description"]} for k, v in ROLES.items()]
 
 
 @router.get("/", response_model=list[UserOut])
@@ -38,6 +51,8 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), u
     if body.password is not None:
         target.hashed_password = hash_password(body.password)
     if body.role is not None and user.role == "admin":
+        if body.role not in ROLES:
+            raise HTTPException(status_code=400, detail="无效的角色")
         target.role = body.role
     db.commit()
     db.refresh(target)

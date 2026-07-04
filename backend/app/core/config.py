@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     MIN_SCORE: float = 0.3  # 相似度阈值
     MAX_CONTEXT_TURNS: int = 10  # 最大上下文轮数
     MAX_ANSWER_LENGTH: int = 1000  # 最大回答长度（字符）
+    MAX_UPLOAD_SIZE_MB: int = 50  # 最大上传文件大小（MB）
 
     # File Storage
     UPLOAD_DIR: str = "./data/storage"

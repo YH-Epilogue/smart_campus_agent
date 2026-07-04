@@ -22,7 +22,10 @@ class KnowledgeBase(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, default="")
+    department = Column(String(100), default="")
+    owner_name = Column(String(50), default="")
     owner_id = Column(Integer, ForeignKey("users.id"))
+    embedding_model = Column(String(100), default="shibing624/text2vec-base-chinese")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     documents = relationship("Document", back_populates="knowledge_base")

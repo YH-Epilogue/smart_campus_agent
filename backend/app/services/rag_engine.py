@@ -110,3 +110,38 @@ def delete_vectors(doc_id: int, collection_name: str):
 
     if results and results["ids"]:
         collection.delete(ids=results["ids"])
+
+
+def deduplicate_vectors(collection_name: str):
+    """向量去重：删除重复文本块的向量"""
+    import chromadb
+    from ..core.config import settings
+
+    client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+    try:
+        collection = client.get_collection(collection_name)
+    except Exception:
+        return 0
+
+    # Get all documents
+    results = collection.get(include=["documents", "metadatas"])
+
+    if not results or not results["ids"]:
+        return 0
+
+    # Find duplicates by document content
+    seen = {}
+    ids_to_delete = []
+
+    for i, doc_id in enumerate(results["ids"]):
+        doc_content = results["documents"][i]
+        if doc_content in seen:
+            ids_to_delete.append(doc_id)
+        else:
+            seen[doc_content] = doc_id
+
+    # Delete duplicates
+    if ids_to_delete:
+        collection.delete(ids=ids_to_delete)
+
+    return len(ids_to_delete)

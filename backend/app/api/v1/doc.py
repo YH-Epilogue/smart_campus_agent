@@ -85,6 +85,12 @@ async def upload_doc(
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
 
+    # Check file size
+    content = await file.read()
+    max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(status_code=400, detail=f"文件大小超过限制（最大 {settings.MAX_UPLOAD_SIZE_MB}MB）")
+
     # Save file
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     ext = os.path.splitext(file.filename)[1]
@@ -114,8 +120,22 @@ async def upload_doc(
 
 
 @router.get("/{kb_id}", response_model=list[DocOut])
-def list_docs(kb_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    docs = db.query(Document).filter(Document.kb_id == kb_id).all()
+def list_docs(
+    kb_id: int,
+    filename: str = None,
+    start_time: str = None,
+    end_time: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    query = db.query(Document).filter(Document.kb_id == kb_id)
+    if filename:
+        query = query.filter(Document.filename.contains(filename))
+    if start_time:
+        query = query.filter(Document.created_at >= start_time)
+    if end_time:
+        query = query.filter(Document.created_at <= end_time)
+    docs = query.all()
     return [DocOut.model_validate(d) for d in docs]
 
 
@@ -231,3 +251,162 @@ async def batch_upload(
         results.append(DocOut.model_validate(doc))
 
     return results
+
+
+@router.get("/{doc_id}/versions")
+def list_versions(doc_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """获取文档版本历史"""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    # Find version files
+    base, ext = os.path.splitext(doc.file_path)
+    versions = []
+    for i in range(1, 100):
+        version_path = f"{base}_v{i}{ext}"
+        if os.path.exists(version_path):
+            mtime = os.path.getmtime(version_path)
+            versions.append({
+                "version": i,
+                "path": version_path,
+                "time": mtime,
+            })
+        else:
+            break
+
+    # Current version is the latest
+    current_version = len(versions) + 1
+
+    return {
+        "current_version": current_version,
+        "versions": versions,
+    }
+
+
+@router.post("/{doc_id}/rollback")
+def rollback_doc(doc_id: int, version: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """回滚到指定版本"""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    # Find version file
+    base, ext = os.path.splitext(doc.file_path)
+    version_path = f"{base}_v{version}{ext}"
+
+    if not os.path.exists(version_path):
+        raise HTTPException(status_code=404, detail=f"版本 {version} 不存在")
+
+    # Read version content
+    with open(version_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Save current version before rollback
+    current_version = 0
+    for i in range(1, 100):
+        if os.path.exists(f"{base}_v{i}{ext}"):
+            current_version = i
+        else:
+            break
+    current_version += 1
+
+    # Copy current file to version
+    import shutil
+    shutil.copy2(doc.file_path, f"{base}_v{current_version}{ext}")
+
+    # Restore version content
+    with open(doc.file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Re-vectorize in background
+    thread = threading.Thread(target=process_document, args=(doc.id, doc.file_path, doc.kb_id))
+    thread.daemon = True
+    thread.start()
+
+    return {"detail": f"已回滚到版本 {version}，当前版本 {current_version}"}
+
+
+@router.get("/{doc_id}/vectors")
+def preview_vectors(doc_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """预览文档的向量数据（调试用）"""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    import chromadb
+    from ...core.config import settings
+
+    collection_name = f"kb_{doc.kb_id}"
+    client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+
+    try:
+        collection = client.get_collection(collection_name)
+    except Exception:
+        return {"vectors": [], "count": 0, "dimension": 0}
+
+    # Get all vectors for this document
+    results = collection.get(
+        where={"doc_id": doc_id},
+        include=["documents", "metadatas", "embeddings"]
+    )
+
+    vectors = []
+    if results and results["ids"]:
+        for i, doc_id_str in enumerate(results["ids"]):
+            vectors.append({
+                "id": doc_id_str,
+                "document": results["documents"][i][:100] if results["documents"] else "",
+                "metadata": results["metadatas"][i] if results["metadatas"] else {},
+                "dimension": len(results["embeddings"][i]) if results["embeddings"] else 0,
+            })
+
+    return {
+        "doc_id": doc_id,
+        "filename": doc.filename,
+        "count": len(vectors),
+        "dimension": vectors[0]["dimension"] if vectors else 0,
+        "vectors": vectors[:10],  # Limit to first 10 for preview
+    }
+
+
+@router.post("/{kb_id}/dedup")
+def dedup_vectors(kb_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """知识库向量去重"""
+    from ...services.rag_engine import deduplicate_vectors
+    collection_name = f"kb_{kb_id}"
+    removed = deduplicate_vectors(collection_name)
+    return {"detail": f"已删除 {removed} 个重复向量"}
+
+
+@router.post("/multimodal")
+async def multimodal_upload(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """多模态文件上传（图片OCR / 语音ASR）"""
+    # Save file temporarily
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    ext = os.path.splitext(file.filename)[1].lower()
+    saved_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(settings.UPLOAD_DIR, saved_name)
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Extract text based on file type
+    from ...services.multimodal import extract_text_from_file
+    try:
+        text = extract_text_from_file(file_path)
+        return {
+            "filename": file.filename,
+            "text": text,
+            "type": "image" if ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp") else "audio" if ext in (".mp3", ".wav", ".m4a", ".ogg", ".flac") else "text",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+    finally:
+        # Clean up temp file
+        if os.path.exists(file_path):
+            os.remove(file_path)
