@@ -14,7 +14,7 @@ export const useUserStore = defineStore("user", () => {
     if (!t) return null;
     const payload = decodeToken(t);
     if (!payload) return null;
-    return { id: payload.sub, role: payload.role || "user" };
+    return { id: payload.sub, username: payload.username, role: payload.role || "user" };
   }
 
   async function login(username, password) {

@@ -72,6 +72,12 @@
           </select>
         </div>
         <div class="input-container">
+          <button class="icon-btn" @click="triggerFileUpload" title="上传图片/文件">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+          <input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*,.pdf,.docx,.txt" style="display:none" />
           <input
             v-model="inputText"
             class="chat-input"
@@ -216,11 +222,58 @@ async function sendQuick(q) {
   await handleSend();
 }
 
+const fileInput = ref(null);
+const uploadedFile = ref(null);
+
+function triggerFileUpload() {
+  fileInput.value?.click();
+}
+
+async function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Show file attachment in input area (not auto-send)
+  uploadedFile.value = file;
+  inputText.value = `📎 ${file.name}`;
+  event.target.value = "";
+}
+
 async function handleSend() {
   const q = inputText.value.trim();
-  if (!q) return;
+  if (!q && !uploadedFile.value) return;
+
+  // If there's an uploaded file, process it first
+  if (uploadedFile.value) {
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadedFile.value);
+      const token = localStorage.getItem("token");
+      chatStore.loading = true;
+      const { data } = await axios.post("/api/v1/doc/multimodal", formData, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+      });
+      chatStore.loading = false;
+
+      if (data.text && data.text.trim()) {
+        inputText.value = data.text;
+      }
+      uploadedFile.value = null;
+    } catch (e) {
+      chatStore.loading = false;
+      chatStore.messages.push({
+        role: "assistant",
+        content: "文件处理失败：" + (e.response?.data?.detail || e.message),
+      });
+      uploadedFile.value = null;
+      return;
+    }
+  }
+
+  const finalQuery = inputText.value.trim();
+  if (!finalQuery) return;
   inputText.value = "";
-  await chatStore.sendMessage(q, selectedKB.value || 1);
+  await chatStore.sendMessage(finalQuery, selectedKB.value || 1);
 }
 </script>
 
@@ -398,6 +451,13 @@ async function handleSend() {
   color: #ffffff; font-size: 14px; padding: 12px 0;
 }
 .chat-input::placeholder { color: rgba(255,255,255,0.3); }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 10px; border: none;
+  background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+}
+.icon-btn:hover { background: rgba(0,242,254,0.1); color: #00f2fe; }
 .send-btn {
   width: 44px; height: 44px; border-radius: 14px; border: none;
   background: linear-gradient(135deg, #00f2fe, #00c4d4);

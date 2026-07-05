@@ -11,7 +11,16 @@
       </template>
     </div>
     <div class="msg-content">
-      <div class="msg-bubble" :class="message.role" v-html="rendered"></div>
+      <!-- File attachment indicator -->
+      <div v-if="message.isFile" class="file-attachment">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <span>{{ message.content }}</span>
+      </div>
+      <!-- Normal message -->
+      <div v-else class="msg-bubble" :class="message.role" v-html="rendered"></div>
       <SourceCitation v-if="message.sources?.length" :sources="message.sources" />
     </div>
   </div>
@@ -90,4 +99,12 @@ const rendered = computed(() => {
 .msg-bubble :deep(strong) { color: #00f2fe; }
 .msg-bubble :deep(ul), .msg-bubble :deep(ol) { padding-left: 20px; margin: 8px 0; }
 .msg-bubble :deep(li) { margin-bottom: 4px; }
+
+.file-attachment {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: rgba(0,242,254,0.08);
+  border: 1px solid rgba(0,242,254,0.15); border-radius: 12px;
+  color: #00f2fe; font-size: 13px;
+}
+.file-attachment svg { flex-shrink: 0; }
 </style>

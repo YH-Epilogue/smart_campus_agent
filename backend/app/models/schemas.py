@@ -70,9 +70,11 @@ class DocOut(BaseModel):
 # ---- Chat ----
 class ChatRequest(BaseModel):
     session_id: str
-    kb_id: int | None = None  # 单个知识库（兼容旧版）
-    kb_ids: list[int] = []  # 多个知识库
+    kb_id: int | None = None
+    kb_ids: list[int] = []
     query: str
+    top_k: int | None = None
+    min_score: float | None = None
 
 
 class ChatResponse(BaseModel):

@@ -8,13 +8,13 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
-export async function listKBs() {
-  const { data } = await http.get("/kb/");
+export async function listKBs(params = {}) {
+  const { data } = await http.get("/kb/", { params });
   return data;
 }
 
-export async function createKB(name, description) {
-  const { data } = await http.post("/kb/", { name, description });
+export async function createKB(name, description, department) {
+  const { data } = await http.post("/kb/", { name, description, department });
   return data;
 }
 

@@ -410,3 +410,34 @@ async def multimodal_upload(
         # Clean up temp file
         if os.path.exists(file_path):
             os.remove(file_path)
+
+
+class SplitPreview(BaseModel):
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+
+
+@router.post("/{doc_id}/split_preview")
+def split_preview(doc_id: int, body: SplitPreview, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """预览文档拆分结果"""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    try:
+        from ...services.rag_engine import parse_document, split_text
+        text = parse_document(doc.file_path)
+        chunks = split_text(text, chunk_size=body.chunk_size, chunk_overlap=body.chunk_overlap)
+
+        return {
+            "total_length": len(text),
+            "chunk_count": len(chunks),
+            "chunk_size": body.chunk_size,
+            "chunk_overlap": body.chunk_overlap,
+            "preview": chunks[:5],  # Show first 5 chunks
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"预览失败: {str(e)}")

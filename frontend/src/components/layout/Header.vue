@@ -22,11 +22,16 @@
 <script setup>
 import { useRouter } from "vue-router";
 import { useUserStore } from "../../stores/userStore";
+import { useChatStore } from "../../stores/chatStore";
 
 const router = useRouter();
 const userStore = useUserStore();
+const chatStore = useChatStore();
 
 function handleLogout() {
+  chatStore.conversations = [];
+  chatStore.currentSessionId = "";
+  chatStore.messages = [];
   userStore.logout();
   router.push("/login");
 }

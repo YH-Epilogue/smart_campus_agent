@@ -55,5 +55,5 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
     # Login success, clear failures
     login_failures.pop(username, None)
 
-    token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    token = create_access_token(data={"sub": str(user.id), "role": user.role, "username": user.username})
     return TokenResponse(access_token=token, role=user.role)
