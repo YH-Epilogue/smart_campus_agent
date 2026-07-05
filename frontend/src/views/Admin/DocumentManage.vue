@@ -95,7 +95,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import { listKBs } from "../../api/kb";
-import { listDocs, deleteDoc, previewDoc, getVersions, rollbackDoc } from "../../api/doc";
+import { listDocs, deleteDoc, previewDoc, getVersions, rollbackDoc, getVectors } from "../../api/doc";
 import FileUploader from "../../components/upload/FileUploader.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 

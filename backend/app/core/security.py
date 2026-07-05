@@ -1,15 +1,23 @@
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from .config import settings
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256((password + settings.SECRET_KEY).encode()).hexdigest()
+    salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000)
+    return f"{salt}${hashed.hex()}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return hash_password(plain_password) == hashed_password
+    try:
+        salt, stored_hash = hashed_password.split("$")
+        check_hash = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt.encode(), 100000)
+        return check_hash.hex() == stored_hash
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:

@@ -46,6 +46,9 @@ class RulesEngine:
     def check_rules(self, query: str) -> str | None:
         """检查对话规则，返回匹配的回复或 None"""
         query_lower = query.lower().strip()
+        # Skip rule matching for long queries (likely file content)
+        if len(query_lower) > 100:
+            return None
         for rule in self.rules:
             for kw in rule["keywords"]:
                 if kw in query_lower:
@@ -55,6 +58,8 @@ class RulesEngine:
     def check_refusal(self, query: str) -> str | None:
         """检查拒绝规则，返回拒绝话术或 None"""
         query_lower = query.lower().strip()
+        if len(query_lower) > 100:
+            return None
         for rule in self.refusal_rules:
             for kw in rule["keywords"]:
                 if kw in query_lower:

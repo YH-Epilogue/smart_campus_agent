@@ -71,24 +71,34 @@
             <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">{{ kb.name }}</option>
           </select>
         </div>
+        <!-- File attachment tag -->
+        <div v-if="uploadedFile" class="file-tag">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>{{ uploadedFile.name }}</span>
+          <span class="file-size">({{ (uploadedFile.size / 1024).toFixed(1) }}KB)</span>
+          <button class="file-remove" @click="uploadedFile = null">×</button>
+        </div>
         <div class="input-container">
           <button class="icon-btn" @click="triggerFileUpload" title="上传图片/文件">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
           </button>
-          <input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*,.pdf,.docx,.txt" style="display:none" />
+          <input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*,.pdf,.docx,.txt,.md" style="display:none" />
           <input
             v-model="inputText"
             class="chat-input"
-            placeholder="输入你的问题..."
+            :placeholder="uploadedFile ? '文件已附加，可输入补充说明...' : '输入你的问题...'"
             @keyup.enter="handleSend"
             :disabled="chatStore.loading"
           />
           <button
             class="send-btn"
             @click="handleSend"
-            :disabled="!inputText.trim() || chatStore.loading"
+            :disabled="(!inputText.trim() && !uploadedFile) || chatStore.loading"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13"/>
@@ -233,18 +243,21 @@ async function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  // Show file attachment in input area (not auto-send)
+  // Store file reference, show as tag above input
   uploadedFile.value = file;
-  inputText.value = `📎 ${file.name}`;
+  inputText.value = "";  // Clear input so user can type additional text
   event.target.value = "";
 }
 
 async function handleSend() {
-  const q = inputText.value.trim();
-  if (!q && !uploadedFile.value) return;
+  const userText = inputText.value.trim();
+  const hasFile = !!uploadedFile.value;
+
+  if (!userText && !hasFile) return;
 
   // If there's an uploaded file, process it first
-  if (uploadedFile.value) {
+  if (hasFile) {
+    const fileName = uploadedFile.value.name;
     try {
       const formData = new FormData();
       formData.append("file", uploadedFile.value);
@@ -255,10 +268,16 @@ async function handleSend() {
       });
       chatStore.loading = false;
 
-      if (data.text && data.text.trim()) {
-        inputText.value = data.text;
+      let fullQuery = data.text || "";
+      if (userText) {
+        fullQuery = fullQuery ? `${fullQuery}\n\n${userText}` : userText;
       }
       uploadedFile.value = null;
+      inputText.value = "";
+
+      if (fullQuery.trim()) {
+        await chatStore.sendMessage(fullQuery, selectedKB.value || 1, fileName, userText);
+      }
     } catch (e) {
       chatStore.loading = false;
       chatStore.messages.push({
@@ -266,14 +285,14 @@ async function handleSend() {
         content: "文件处理失败：" + (e.response?.data?.detail || e.message),
       });
       uploadedFile.value = null;
+      inputText.value = "";
       return;
     }
+  } else {
+    // No file, just send text
+    inputText.value = "";
+    await chatStore.sendMessage(userText, selectedKB.value || 1);
   }
-
-  const finalQuery = inputText.value.trim();
-  if (!finalQuery) return;
-  inputText.value = "";
-  await chatStore.sendMessage(finalQuery, selectedKB.value || 1);
 }
 </script>
 
@@ -435,6 +454,19 @@ async function handleSend() {
   outline: none; cursor: pointer;
 }
 .kb-select option { background: #1a1d2e; color: #fff; }
+.file-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; background: rgba(0,242,254,0.1);
+  border: 1px solid rgba(0,242,254,0.2); border-radius: 8px;
+  font-size: 12px; color: #00f2fe; margin-bottom: 10px;
+}
+.file-tag svg { flex-shrink: 0; }
+.file-size { color: rgba(255,255,255,0.4); font-size: 11px; }
+.file-remove {
+  background: none; border: none; color: rgba(255,255,255,0.4);
+  cursor: pointer; font-size: 14px; padding: 0 4px; margin-left: 4px;
+}
+.file-remove:hover { color: #fa709a; }
 .input-container {
   display: flex; align-items: center; gap: 12px;
   background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);

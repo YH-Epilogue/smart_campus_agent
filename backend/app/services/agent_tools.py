@@ -30,9 +30,11 @@ class ToolRegistry:
 
     async def execute(self, tool_name: str, arguments: dict, db: Session) -> dict:
         if tool_name not in self._tools:
-            return {"error": f"未知工具: {tool_name}"}
+            return {"success": False, "error": f"未知工具: {tool_name}"}
         try:
             result = self._tools[tool_name](db=db, **arguments)
+            if isinstance(result, dict) and "error" in result:
+                return {"success": False, "error": result["error"]}
             return {"success": True, "result": result}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -71,6 +73,9 @@ class ToolRegistry:
                 return {"error": "未找到该学生"}
             student_id = student.id
 
+        if not student_id:
+            return {"error": "必须提供有效的学号"}
+
         leave = LeaveRequest(
             student_id=student_id,
             start_date=start_date,
@@ -94,6 +99,9 @@ class ToolRegistry:
             if not student:
                 return {"error": "未找到该学生"}
             student_id = student.id
+
+        if not student_id:
+            return {"error": "必须提供有效的学号"}
 
         leaves = db.query(LeaveRequest).filter(LeaveRequest.student_id == student_id).all()
         return [

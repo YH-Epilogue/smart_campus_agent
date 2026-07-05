@@ -30,10 +30,10 @@ export const useChatStore = defineStore("chat", () => {
     return id;
   }
 
-  async function sendMessage(query, kbId) {
+  async function sendMessage(query, kbId, fileName, supplementText) {
     if (!currentSessionId.value) createSession();
 
-    messages.value.push({ role: "user", content: query });
+    messages.value.push({ role: "user", content: query, file_name: fileName || null, supplement: supplementText || null });
     loading.value = true;
 
     try {

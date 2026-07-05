@@ -11,13 +11,16 @@
       </template>
     </div>
     <div class="msg-content">
-      <!-- File attachment indicator -->
-      <div v-if="message.isFile" class="file-attachment">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <span>{{ message.content }}</span>
+      <!-- User message with file attachment -->
+      <div v-if="message.role === 'user' && message.file_name" class="msg-bubble user">
+        <div class="file-attachment">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>{{ message.file_name }}</span>
+        </div>
+        <div v-if="message.supplement" class="supplement-text">{{ message.supplement }}</div>
       </div>
       <!-- Normal message -->
       <div v-else class="msg-bubble" :class="message.role" v-html="rendered"></div>
@@ -102,9 +105,10 @@ const rendered = computed(() => {
 
 .file-attachment {
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 14px; background: rgba(0,242,254,0.08);
-  border: 1px solid rgba(0,242,254,0.15); border-radius: 12px;
-  color: #00f2fe; font-size: 13px;
+  padding: 8px 12px; background: rgba(0,242,254,0.08);
+  border: 1px solid rgba(0,242,254,0.15); border-radius: 8px;
+  color: #00f2fe; font-size: 13px; margin-bottom: 8px;
 }
 .file-attachment svg { flex-shrink: 0; }
+.supplement-text { font-size: 14px; color: rgba(255,255,255,0.9); line-height: 1.6; }
 </style>

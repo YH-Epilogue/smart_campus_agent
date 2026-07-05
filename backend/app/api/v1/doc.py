@@ -91,12 +91,17 @@ async def upload_doc(
     if len(content) > max_size:
         raise HTTPException(status_code=400, detail=f"文件大小超过限制（最大 {settings.MAX_UPLOAD_SIZE_MB}MB）")
 
+    # Check file type whitelist
+    allowed_exts = {".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp", ".mp3", ".wav", ".m4a", ".ogg", ".flac"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"不支持的文件格式: {ext}，允许的格式: {', '.join(sorted(allowed_exts))}")
+
     # Save file
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     ext = os.path.splitext(file.filename)[1]
     saved_name = f"{uuid.uuid4().hex}{ext}"
     file_path = os.path.join(settings.UPLOAD_DIR, saved_name)
-    content = await file.read()
     with open(file_path, "wb") as f:
         f.write(content)
 
@@ -354,11 +359,12 @@ def preview_vectors(doc_id: int, db: Session = Depends(get_db), user=Depends(get
     vectors = []
     if results and results["ids"]:
         for i, doc_id_str in enumerate(results["ids"]):
+            dim = len(results["embeddings"][i]) if results["embeddings"] is not None and len(results["embeddings"]) > i else 0
             vectors.append({
                 "id": doc_id_str,
                 "document": results["documents"][i][:100] if results["documents"] else "",
                 "metadata": results["metadatas"][i] if results["metadatas"] else {},
-                "dimension": len(results["embeddings"][i]) if results["embeddings"] else 0,
+                "dimension": dim,
             })
 
     return {

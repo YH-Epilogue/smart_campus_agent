@@ -19,7 +19,7 @@ SENSITIVE_WORDS = ["暴力", "色情", "赌博", "毒品"]
 
 TOOL_INTENTS = {
     "query_student": ["查询学生", "学生信息", "查一下", "找一下学生"],
-    "create_leave_request": ["请假", "提交请假", "申请请假"],
+    "create_leave_request": ["帮我请假", "申请请假", "提交请假", "我要请假", "想请假"],
     "get_leave_status": ["请假状态", "请假进度", "请假审核"],
 }
 
@@ -63,20 +63,25 @@ def filter_sensitive(text: str) -> str:
     return text
 
 
-async def execute_tool(query: str, db: Session) -> str | None:
-    """检测工具意图并执行"""
+async def execute_tool(query: str, db: Session, user=None) -> str | None:
+    """检测工具意图并执行（需要 admin 或 kb_admin 权限）"""
+    if user and user.role not in ("admin", "kb_admin"):
+        return None  # 普通用户不能调用工具
     for tool_name, keywords in TOOL_INTENTS.items():
         for kw in keywords:
             if kw in query:
                 args = {}
                 if tool_name == "query_student":
-                    id_match = re.search(r'(\d{8,})', query)
+                    id_match = re.search(r'学号\s*(\d{4,})', query) or re.search(r'(\d{6,})', query)
                     name_match = re.search(r'[\u4e00-\u9fa5]{2,4}(?=的|是谁|是谁的|信息)', query)
                     if id_match:
                         args["student_id"] = id_match.group(1)
                     elif name_match:
                         args["name"] = name_match.group(0)
                 elif tool_name == "create_leave_request":
+                    id_match = re.search(r'学号\s*(\d{4,})', query) or re.search(r'(\d{6,})', query)
+                    if id_match:
+                        args["student_id_str"] = id_match.group(1)
                     date_match = re.findall(r'(\d{4}[-/]\d{1,2}[-/]\d{1,2})', query)
                     if len(date_match) >= 2:
                         args["start_date"] = date_match[0]
@@ -84,16 +89,30 @@ async def execute_tool(query: str, db: Session) -> str | None:
                     reason_match = re.search(r'(?:因为|由于|因|原因)[：:]?\s*(.+?)(?:。|$)', query)
                     if reason_match:
                         args["reason"] = reason_match.group(1)
+                    if "student_id_str" not in args:
+                        return "请提供学号，例如：帮我请假 学号2023001 2024-01-01 到 2024-01-05"
                 elif tool_name == "get_leave_status":
-                    id_match = re.search(r'(\d{8,})', query)
+                    id_match = re.search(r'学号\s*(\d{4,})', query) or re.search(r'(\d{6,})', query)
                     if id_match:
                         args["student_id_str"] = id_match.group(1)
 
                 result = await tool_registry.execute(tool_name, args, db)
                 if result.get("success"):
-                    return json.dumps(result["result"], ensure_ascii=False, indent=2)
+                    data = result["result"]
+                    if isinstance(data, dict):
+                        if "name" in data:
+                            return f"学生信息：{data['name']}（学号{data.get('student_id', '')}，{data.get('class_name', '')}，电话{data.get('phone', '')}）"
+                        if "leave_id" in data:
+                            return f"请假申请已提交！工单号：{data['leave_id']}，状态：{data.get('status', '')}"
+                        return data.get("message", str(data))
+                    if isinstance(data, list):
+                        if not data:
+                            return "暂无请假记录"
+                        lines = [f"- {l['start_date']} 至 {l['end_date']} | {l.get('reason', '')} | {l['status']}" for l in data]
+                        return "请假记录：\n" + "\n".join(lines)
+                    return str(data)
                 else:
-                    return f"工具执行失败：{result.get('error', '未知错误')}"
+                    return result.get('error', '工具执行失败')
     return None
 
 
@@ -120,12 +139,12 @@ async def chat(body: ChatRequest, db: Session = Depends(get_db), user=Depends(ge
             answer = rule_response
         else:
             # 3. Check tool intents
-            tool_answer = await execute_tool(query, db)
+            tool_answer = await execute_tool(query, db, user)
             if tool_answer:
                 answer = tool_answer
             else:
-                # 4. Intent recognition
-                intent = recognize_intent(query)
+                # 4. Intent recognition (skip for long queries like file uploads)
+                intent = recognize_intent(query) if len(query) < 100 else "query"
                 if intent in INTENT_REPLIES:
                     answer = INTENT_REPLIES[intent]
                 else:
