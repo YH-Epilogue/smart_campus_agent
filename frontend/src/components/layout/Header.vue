@@ -20,6 +20,12 @@
 </template>
 
 <script setup>
+/**
+ * Header - 页面顶部导航栏
+ * 职责：展示系统标题、当前登录用户信息、退出登录按钮
+ * 布局：左侧状态灯+标题 → 右侧用户头像+退出按钮
+ * 退出时清空会话状态并跳转到登录页
+ */
 import { useRouter } from "vue-router";
 import { useUserStore } from "../../stores/userStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -28,6 +34,7 @@ const router = useRouter();
 const userStore = useUserStore();
 const chatStore = useChatStore();
 
+/** 退出登录：清空会话状态 → 退出用户认证 → 跳转登录页 */
 function handleLogout() {
   chatStore.conversations = [];
   chatStore.currentSessionId = "";

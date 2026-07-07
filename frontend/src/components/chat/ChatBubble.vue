@@ -30,15 +30,32 @@
 </template>
 
 <script setup>
+/**
+ * ChatBubble - 聊天消息气泡组件
+ * 职责：渲染单条聊天消息，区分用户/AI 两种角色样式
+ * 特殊处理：
+ * - 用户消息可附带文件附件（file_name + supplement）
+ * - AI 回复支持 Markdown 简易渲染（代码块、行内代码、换行）
+ * - 底部展示知识库引用来源（SourceCitation 组件）
+ */
 import { computed } from "vue";
 import SourceCitation from "./SourceCitation.vue";
 
 const props = defineProps({ message: Object });
 
+/**
+ * 简易 Markdown 渲染：
+ * ```code``` → <pre><code>、`code` → <code>、\n → <br>
+ * 注意：不处理标题、列表等复杂语法，仅满足基本展示需求
+ */
 const rendered = computed(() => {
   return props.message.content
+    .replace(/&/g, "&amp;")    // HTML 转义，防止 XSS
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
     .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")  // 支持加粗
     .replace(/\n/g, "<br>");
 });
 </script>

@@ -159,8 +159,16 @@
           </div>
           <form @submit.prevent="handleLogin">
             <div class="field">
+              <label>角色</label>
+              <select v-model="form.role" class="role-select">
+                <option value="student">学生</option>
+                <option value="teacher">老师</option>
+                <option value="admin">管理员</option>
+              </select>
+            </div>
+            <div class="field">
               <label>USERNAME</label>
-              <input v-model="form.username" type="text" placeholder="请输入用户名" required />
+              <input v-model="form.username" type="text" :placeholder="rolePlaceholder" required />
             </div>
             <div class="field">
               <label>PASSWORD</label>
@@ -190,7 +198,13 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, onUnmounted } from "vue";
+/**
+ * Login - 落地页 + 登录/注册页面
+ * 职责：品牌展示（hero/about/features/tech 四个区块）+ 登录注册弹窗
+ * 设计：Liquid Aurora 动态背景 + 鼠标视差追踪 + 3D 几何核心装饰
+ * 架构：单页落地页，滚动进入各区块，点击按钮弹出登录模态框
+ */
+import { reactive, ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "../stores/userStore";
 import { register } from "../api/user";
@@ -198,16 +212,30 @@ import { ElMessage } from "element-plus";
 
 const router = useRouter();
 const userStore = useUserStore();
-const loading = ref(false);
-const showPassword = ref(false);
-const showLogin = ref(false);
-const form = reactive({ username: "", password: "" });
-const loginSection = ref(null);
+const loading = ref(false);            // 登录/注册请求加载状态
+const showPassword = ref(false);       // 密码明文切换
+const showLogin = ref(false);          // 登录弹窗显示控制
+const form = reactive({ username: "", password: "", role: "student" }); // 登录表单数据
+const loginSection = ref(null);        // 登录区域 DOM 引用
+const isScrolled = ref(false);            // 页面滚动状态，用于 header 样式切换
 
+/** 根据角色动态切换输入框占位提示文本 */
+const rolePlaceholder = computed(() => {
+  const map = { student: "请输入学号/用户名", teacher: "请输入工号/用户名", admin: "请输入管理员账号" };
+  return map[form.role] || "请输入用户名";
+});
+
+/** 登录处理：调用 userStore.login 发起认证请求，验证角色匹配后跳转首页 */
 async function handleLogin() {
   loading.value = true;
   try {
-    await userStore.login(form.username, form.password);
+    const result = await userStore.login(form.username, form.password);
+    // 验证用户选择的角色与后端实际角色一致
+    if (result.role !== form.role) {
+      const roleNames = { student: "学生", teacher: "老师", admin: "管理员" };
+      ElMessage.error(`当前账号角色为${roleNames[result.role] || result.role}，不是${roleNames[form.role] || form.role}`);
+      return;
+    }
     router.push("/");
   } catch (e) {
     ElMessage.error("登录失败：" + (e.response?.data?.detail || e.message));
@@ -216,23 +244,26 @@ async function handleLogin() {
   }
 }
 
+/** 注册处理：使用当前表单的用户名密码和角色注册新用户 */
 async function handleRegister() {
   if (!form.username || !form.password) {
     ElMessage.warning("请先输入用户名和密码");
     return;
   }
   try {
-    await register(form.username, form.password);
+    await register(form.username, form.password, form.role);
     ElMessage.success("注册成功，请登录");
   } catch (e) {
     ElMessage.error("注册失败：" + (e.response?.data?.detail || e.message));
   }
 }
 
+/** 滚动到登录弹窗：通过 showLogin 控制模态框显隐 */
 function scrollToLogin() {
   showLogin.value = true;
 }
 
+/** 平滑滚动到关于区块 */
 function scrollToAbout() {
   document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' });
 }
@@ -240,6 +271,7 @@ function scrollToAbout() {
 // Glitch effect placeholder (handled in onMounted)
 function glitchEffect() {}
 
+/** 平台四大核心能力展示数据 */
 const features = [
   {
     icon: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
@@ -263,6 +295,7 @@ const features = [
   }
 ];
 
+/** 技术架构展示数据 */
 const techs = [
   { name: "FastAPI", desc: "高性能异步后端框架" },
   { name: "Vue 3", desc: "响应式前端框架" },
@@ -272,6 +305,15 @@ const techs = [
   { name: "Element Plus", desc: "UI 组件库" },
 ];
 
+/**
+ * 初始化交互效果：
+ * 1. 鼠标视差：三个 aurora orb + 标题 3D 倾斜 + 鼠标跟随光晕
+ * 2. Data-box 点击 glitch 效果
+ * 3. IntersectionObserver 滚动入场动画
+ */
+let mouseHandler = null;
+const cleanupFns = [];
+
 onMounted(() => {
   const orb1 = document.getElementById('orb1');
   const orb2 = document.getElementById('orb2');
@@ -279,8 +321,8 @@ onMounted(() => {
   const mainTitle = document.getElementById('mainTitle');
   const mouseGlow = document.getElementById('mouseGlow');
 
-  // Mouse tracking - parallax orbs + 3D title tilt + glow
-  document.addEventListener('mousemove', (e) => {
+  /** 鼠标移动处理器：驱动视差、3D 倾斜和光晕跟随 */
+  mouseHandler = (e) => {
     const x = e.clientX / window.innerWidth - 0.5;
     const y = e.clientY / window.innerHeight - 0.5;
 
@@ -299,7 +341,8 @@ onMounted(() => {
       mouseGlow.style.left = e.clientX + 'px';
       mouseGlow.style.top = e.clientY + 'px';
     }
-  });
+  };
+  document.addEventListener('mousemove', mouseHandler);
 
   // Glitch effect on data-box click
   document.querySelectorAll('.data-box').forEach(box => {
@@ -328,10 +371,12 @@ onMounted(() => {
   }, { threshold: 0.15 });
 
   document.querySelectorAll('.section').forEach(s => observer.observe(s));
+  cleanupFns.push(() => observer.disconnect());
 });
 
 onUnmounted(() => {
-  // Cleanup handled by page unload
+  cleanupFns.forEach(fn => fn());
+  if (mouseHandler) document.removeEventListener('mousemove', mouseHandler);
 });
 </script>
 
@@ -642,6 +687,19 @@ onUnmounted(() => {
   border-color: rgba(255,255,255,0.3);
   box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
 }
+.role-select {
+  width: 100%; padding: 14px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 2px; color: #fff; font-size: 14px;
+  outline: none; transition: all 0.3s;
+  appearance: none; cursor: pointer;
+}
+.role-select option { background: #1a1d2e; color: #fff; }
+.role-select:focus {
+  border-color: rgba(255,255,255,0.3);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
+}
 .password-wrap { position: relative; }
 .password-wrap input { padding-right: 48px; }
 .eye-btn {
@@ -763,54 +821,6 @@ onUnmounted(() => {
   font-family: 'Space Mono', monospace;
   font-size: 13px; color: rgba(255,255,255,0.6);
 }
-.about-text {
-  font-family: 'Space Mono', monospace;
-  font-size: 14px; line-height: 2; color: rgba(255,255,255,0.4);
-  margin-bottom: 24px;
-}
-
-/* Features */
-.features-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
-  margin-top: 64px;
-}
-.feature-card {
-  padding: 32px; border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 2px; background: rgba(255,255,255,0.04);
-  transition: all 0.4s ease;
-}
-.feature-card:hover {
-  border-color: rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  transform: translateY(-4px);
-}
-.feature-icon { color: rgba(255,255,255,0.3); margin-bottom: 24px; }
-.feature-card h3 {
-  font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.9);
-  margin-bottom: 12px; letter-spacing: 0.5px;
-}
-.feature-card p {
-  font-family: 'Space Mono', monospace;
-  font-size: 12px; line-height: 1.8; color: rgba(255,255,255,0.45);
-}
-
-/* Tech */
-.tech-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
-  margin-top: 64px;
-}
-.tech-item {
-  padding: 28px; border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.tech-name {
-  font-size: 16px; font-weight: 500; color: rgba(255,255,255,0.9);
-  margin-bottom: 8px; letter-spacing: 0.5px;
-}
-.tech-desc {
-  font-family: 'Space Mono', monospace;
-  font-size: 12px; color: rgba(255,255,255,0.45);
-}
-
 /* Login trigger section */
 .login-trigger-section { text-align: center; }
 .login-trigger-desc {
@@ -820,17 +830,6 @@ onUnmounted(() => {
 }
 .btn-glow.large {
   padding: 18px 60px; font-size: 13px;
-}
-.btn-glow {
-  padding: 14px 40px; background: #fff; border: none;
-  color: #080b12; font-size: 12px; font-weight: 700;
-  letter-spacing: 3px; text-transform: uppercase;
-  cursor: pointer; transition: all 0.4s;
-  font-family: 'Montserrat', sans-serif;
-}
-.btn-glow:hover {
-  box-shadow: 0 0 30px rgba(255,255,255,0.3);
-  transform: translateY(-2px);
 }
 
 /* ==================== ANIMATIONS ==================== */

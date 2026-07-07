@@ -1,4 +1,4 @@
-# 部署指南 - 组员协作
+# 灵犀 (Smart Campus Agent) 部署指南
 
 ## 从 GitHub 拉取后部署
 
@@ -27,18 +27,11 @@ pip install -r requirements.txt
 
 #### 2.3 配置环境变量
 
-**方法一：编辑 .env 文件**
-```
-# 编辑 backend/.env
-LLM_PROVIDER=deepseek
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-chat
-```
+设置系统环境变量 DeepSeek_API_KEY（推荐）：
 
-**方法二：设置系统环境变量（推荐）**
 ```bash
 # Windows PowerShell
-[System.Environment]::SetEnvironmentVariable("DeepSeek_API_KEY", "你的API密钥", "User")
+[System.Environment]::SetEnvironmentVariable("DeepSeek_API_KEY", "你的API密钥", "Machine")
 
 # Linux/Mac
 export DeepSeek_API_KEY="你的API密钥"
@@ -51,14 +44,9 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ### 步骤 3：前端环境
 
-#### 3.1 安装依赖
 ```bash
 cd frontend
 npm install
-```
-
-#### 3.2 启动前端
-```bash
 npm run dev
 ```
 
@@ -67,66 +55,74 @@ npm run dev
 - API 文档：http://localhost:8000/docs
 - 默认账号：admin / 123456
 
-## Windows 一键启动
+## 一键启动（Windows）
 
-双击 `启动.bat` 即可自动启动前后端。
+将项目克隆到 `E:\实训\smart_campus_agent` 后，双击以下脚本即可：
+
+| 脚本 | 功能 |
+|------|------|
+| `E:\实训\Yan\启动.py` | 启动后端 + 前端，独立窗口运行 |
+| `E:\实训\Yan\关闭.py` | 关闭所有服务进程 |
+| `E:\实训\Yan\重启.py` | 先关闭再启动 |
+
+也可以直接运行 `python E:\实训\Yan\启动.py`。
+
+## 角色与权限
+
+| 角色 | 用户名 | 登录后可用页面 |
+|------|--------|----------------|
+| 管理员 | admin | 全部页面 |
+| 教师 | zzl | 对话 + 知识库 + 文档 + 请假审批 |
+| 学生 | yanhao | 对话 + 我的请假 |
+
+登录时需选择对应角色，角色不匹配会提示错误。
 
 ## API 调用示例
 
-### 使用 curl 测试
+### 登录获取 Token
 ```bash
-# 登录获取 token
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"123456"}'
-
-# 使用 token 调用对话接口
-curl -X POST http://localhost:8000/api/v1/chat/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"session_id":"test","kb_id":1,"query":"你好"}'
 ```
 
-### 使用 Python requests
+### 对话
 ```python
 import requests
 
-# 登录
 resp = requests.post("http://localhost:8000/api/v1/auth/login",
     json={"username": "admin", "password": "123456"})
 token = resp.json()["access_token"]
 
-# 对话
 headers = {"Authorization": f"Bearer {token}"}
 resp = requests.post("http://localhost:8000/api/v1/chat/",
     json={"session_id": "test", "kb_id": 1, "query": "你好"},
     headers=headers)
-print(resp.json())
+print(resp.json()["answer"])
 ```
 
-### 工具调用示例
+### 工具调用
 ```python
 # 查询学生
-resp = requests.post("http://localhost:8000/api/v1/chat/",
-    json={"session_id": "test", "query": "查询学生张三"},
+requests.post("http://localhost:8000/api/v1/chat/",
+    json={"session_id": "test", "query": "查询学生 学号2023001"},
     headers=headers)
 
 # 提交请假
-resp = requests.post("http://localhost:8000/api/v1/chat/",
-    json={"session_id": "test", "query": "帮我请假，从2024-01-01到2024-01-05，因为生病"},
+requests.post("http://localhost:8000/api/v1/chat/",
+    json={"session_id": "test", "query": "帮我请假 学号2023001 2024-01-01 到 2024-01-05 因为生病"},
     headers=headers)
 ```
 
 ## 常见问题
 
-### Q: 启动报 ModuleNotFoundError
-A: 确保在虚拟环境中安装了所有依赖：`pip install -r requirements.txt`
-
-### Q: DeepSeek API 调用失败
-A: 检查环境变量 DeepSeek_API_KEY 是否正确设置
-
-### Q: ChromaDB 首次加载慢
-A: 首次使用会下载 embedding 模型（约 80MB），之后会缓存
-
-### Q: 前端跨域错误
-A: 确保后端 CORS 配置包含前端地址，检查 vite.config.js 代理配置
+| 问题 | 解决方案 |
+|------|----------|
+| ModuleNotFoundError | 确保在虚拟环境中：`pip install -r requirements.txt` |
+| DeepSeek API 调用失败 | 检查环境变量 DeepSeek_API_KEY 是否设置 |
+| ChromaDB 首次加载慢 | 首次下载 embedding 模型（~80MB），之后自动缓存 |
+| 前端跨域错误 | 检查 vite.config.js 代理配置和后端 CORS |
+| pip 安装 SSL 错误 | 执行 `$env:NO_PROXY="*"; $env:no_proxy="*"` |
+| pydantic 版本冲突 | `pip install pydantic==2.9.2 pydantic-core==2.23.4 pydantic-settings` |
+| 登录页面黑屏 | F12 控制台查看报错，重启前端 dev server |
+| 后端启动超时 | 确认 DeepSeek_API_KEY 环境变量已设置 |

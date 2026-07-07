@@ -38,19 +38,20 @@
       </div>
     </div>
 
-    <div v-if="!collapsed" class="sidebar-footer">
-      <router-link to="/admin/kb" class="nav-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-        </svg>
-        知识库管理
-      </router-link>
-      <router-link to="/admin/doc" class="nav-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-        </svg>
-        文档管理
-      </router-link>
+    <div v-if="!collapsed && (userStore.isTeacher || userStore.isAdmin)" class="sidebar-footer">
+      <router-link to="/admin/kb" class="nav-link">知识库管理</router-link>
+      <router-link to="/admin/doc" class="nav-link">文档管理</router-link>
+      <router-link to="/admin/leave" class="nav-link">请假审批</router-link>
+      <template v-if="userStore.isAdmin">
+        <router-link to="/admin/dashboard" class="nav-link">数据统计</router-link>
+        <router-link to="/admin/users" class="nav-link">用户管理</router-link>
+        <router-link to="/admin/logs" class="nav-link">日志管理</router-link>
+        <router-link to="/admin/settings" class="nav-link">系统配置</router-link>
+      </template>
+    </div>
+
+    <div v-if="!collapsed && userStore.isStudent" class="sidebar-footer">
+      <router-link to="/student/leave" class="nav-link">我的请假</router-link>
     </div>
 
     <button class="toggle-btn" @click="collapsed = !collapsed">
@@ -63,15 +64,27 @@
 </template>
 
 <script setup>
+/**
+ * Sidebar - 导航侧边栏
+ * 职责：会话列表管理 + 角色导航链接 + 折叠控制
+ * 布局：顶部标题/新建按钮 → 中部会话列表 → 底部角色导航 → 折叠按钮
+ * 权限：teacher/admin 看管理链接，student 看请假链接，admin 看全部管理链接
+ */
 import { ref, onMounted } from "vue";
 import { useChatStore } from "../../stores/chatStore";
+import { useUserStore } from "../../stores/userStore";
 import { ElMessageBox } from "element-plus";
 
 const chatStore = useChatStore();
-const collapsed = ref(false);
+const userStore = useUserStore();
+const collapsed = ref(false); // 侧边栏折叠状态
 
-function handleNew() { chatStore.createSession(); }
+/** 创建新会话：清空当前对话，开始新对话 */
+function handleNew() {
+  chatStore.createSession();
+}
 
+/** 删除会话：二次确认后删除，从列表中移除 */
 async function handleDelete(id) {
   try {
     await ElMessageBox.confirm("确定删除此会话？", "确认", {
@@ -81,7 +94,9 @@ async function handleDelete(id) {
   } catch (e) {}
 }
 
-onMounted(() => { chatStore.loadSessions(); });
+onMounted(() => {
+  chatStore.loadSessions();
+});
 </script>
 
 <style scoped>
@@ -148,11 +163,13 @@ onMounted(() => { chatStore.loadSessions(); });
 .sidebar-footer {
   padding: 12px; border-top: 1px solid rgba(255,255,255,0.06);
   display: flex; flex-direction: column; gap: 4px;
+  position: relative; z-index: 5;
 }
 .nav-link {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
   border-radius: 12px; color: rgba(255,255,255,0.45); text-decoration: none;
   font-size: 13px; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative; z-index: 5;
 }
 .nav-link:hover { background: rgba(255,255,255,0.04); color: #00f2fe; }
 

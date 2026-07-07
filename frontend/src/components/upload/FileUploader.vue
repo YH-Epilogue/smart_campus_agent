@@ -18,20 +18,29 @@
 </template>
 
 <script setup>
+/**
+ * FileUploader - 文件上传组件
+ * 职责：拖拽/点击上传文档到指定知识库
+ * 支持格式：PDF、Word、TXT、Markdown
+ * 流程：选择文件 → 点击上传按钮 → 调用 uploadDoc API → 通知父组件刷新
+ * 注意：每次只上传单个文件（覆盖选择）
+ */
 import { ref } from "vue";
 import { uploadDoc } from "../../api/doc";
 import { ElMessage } from "element-plus";
 
-const props = defineProps({ kbId: Number });
-const emit = defineEmits(["uploaded"]);
+const props = defineProps({ kbId: Number });    // 目标知识库 ID
+const emit = defineEmits(["uploaded"]);         // 上传成功事件，通知父组件刷新
 
-const fileList = ref([]);
-const uploading = ref(false);
+const fileList = ref([]);     // 已选择的文件列表（Element Upload 格式）
+const uploading = ref(false); // 上传中状态
 
+/** 文件选择回调：替换为最新选择的文件 */
 function handleChange(file) {
   fileList.value = [file];
 }
 
+/** 执行上传：调用 API 上传文件到指定知识库，成功后清空列表并通知父组件 */
 async function handleUpload() {
   if (!fileList.value.length) return;
   uploading.value = true;

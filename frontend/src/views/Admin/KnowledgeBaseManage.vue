@@ -50,20 +50,31 @@
 </template>
 
 <script setup>
+/**
+ * KnowledgeBaseManage - 知识库管理页面
+ * 职责：知识库的增删改查和克隆操作
+ * 筛选：支持按名称、部门、日期范围筛选
+ * 权限：teacher/admin 看全部知识库，普通用户只看自己的
+ */
 import { ref, reactive, onMounted } from "vue";
 import { listKBs, createKB, deleteKB, updateKB, cloneKB } from "../../api/kb";
 import { ElMessage } from "element-plus";
 
-const kbs = ref([]);
-const newName = ref("");
-const newDesc = ref("");
-const error = ref("");
-const editVisible = ref(false);
-const editForm = reactive({ id: 0, name: "", description: "" });
-const filterName = ref("");
-const filterDept = ref("");
-const filterDate = ref(null);
+/** 知识库列表和表单状态 */
+const kbs = ref([]);           // 知识库列表
+const newName = ref("");       // 新建知识库名称
+const newDesc = ref("");       // 新建知识库描述
+const newDept = ref("");       // 新建知识库所属部门
+const error = ref("");         // 错误提示信息
+const editVisible = ref(false); // 编辑弹窗控制
+const editForm = reactive({ id: 0, name: "", description: "" }); // 编辑表单
 
+/** 筛选条件 */
+const filterName = ref("");    // 按名称搜索
+const filterDept = ref("");    // 按部门筛选
+const filterDate = ref(null);  // 日期范围筛选
+
+/** 加载知识库列表，支持筛选参数 */
 async function loadKBs() {
   try {
     error.value = "";
@@ -80,6 +91,7 @@ async function loadKBs() {
   }
 }
 
+/** 创建知识库：校验名称非空后调用 API */
 async function handleCreate() {
   if (!newName.value.trim()) return;
   try {
@@ -94,6 +106,7 @@ async function handleCreate() {
   }
 }
 
+/** 打开编辑弹窗：填充当前知识库的名称和描述 */
 function openEdit(kb) {
   editForm.id = kb.id;
   editForm.name = kb.name;
@@ -101,6 +114,7 @@ function openEdit(kb) {
   editVisible.value = true;
 }
 
+/** 保存编辑：更新知识库名称和描述 */
 async function handleEdit() {
   try {
     await updateKB(editForm.id, editForm.name, editForm.description);
@@ -112,6 +126,7 @@ async function handleEdit() {
   }
 }
 
+/** 克隆知识库：复制整个知识库及其文档结构 */
 async function handleClone(kbId) {
   try {
     await cloneKB(kbId);
@@ -122,6 +137,7 @@ async function handleClone(kbId) {
   }
 }
 
+/** 删除知识库（无二次确认，可考虑添加） */
 async function handleDelete(id) {
   try {
     await deleteKB(id);

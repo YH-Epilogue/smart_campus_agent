@@ -111,22 +111,36 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+/**
+ * ChatView - 主聊天界面
+ * 职责：承载 AI 对话的完整交互流程，包括消息展示、输入、文件上传、知识库切换
+ * 架构：粒子网络动画背景 + 欢迎区/消息区双态切换 + 底部输入停靠栏
+ * 依赖：chatStore 管理会话状态，Sidebar/Header 提供布局框架
+ */
+import { ref, onMounted, onUnmounted } from "vue";
 import { useChatStore } from "../stores/chatStore";
 import Sidebar from "../components/layout/Sidebar.vue";
 import Header from "../components/layout/Header.vue";
 import ChatBubble from "../components/chat/ChatBubble.vue";
-import axios from "axios";
+import http from "../api/http";
 
+/** 状态管理：会话消息、用户输入、UI 状态 */
 const chatStore = useChatStore();
-const inputText = ref("");
-const messagesRef = ref(null);
-const quickQuestions = ref([]);
-const particleCanvas = ref(null);
-const selectedKB = ref(null);
-const knowledgeBases = ref([]);
+const inputText = ref("");              // 用户当前输入文本
+const messagesRef = ref(null);          // 消息区 DOM 引用，用于滚动控制
+const quickQuestions = ref([]);         // 快捷提问列表（从 settings 获取）
+const particleCanvas = ref(null);       // 粒子网络 Canvas 引用
+const selectedKB = ref(null);           // 当前选中的知识库 ID
+const knowledgeBases = ref([]);         // 可用知识库列表
 
-// Particle network
+/**
+ * 组件挂载：初始化粒子网络动画、加载快捷提问和知识库
+ * 粒子网络使用 requestAnimationFrame 驱动，注意未在 onUnmounted 清理（已知问题）
+ */
+/** 组件卸载时执行所有清理函数 */
+const cleanupFns = [];
+onUnmounted(() => cleanupFns.forEach(fn => fn()));
+
 onMounted(() => {
   const canvas = particleCanvas.value;
   if (!canvas) return;
@@ -155,6 +169,7 @@ onMounted(() => {
     });
   }
 
+  let animFrameId;
   function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < dotCount; i++) {
@@ -193,31 +208,40 @@ onMounted(() => {
       if (d.y < -10) d.y = canvas.height + 10;
       if (d.y > canvas.height + 10) d.y = -10;
     });
-    requestAnimationFrame(animate);
+    animFrameId = requestAnimationFrame(animate);
   }
+  animate();
   animate();
   loadQuickQuestions();
   loadKnowledgeBases();
+
+  // 注册清理函数
+  cleanupFns.push(() => {
+    cancelAnimationFrame(animFrameId);
+    window.removeEventListener("resize", resize);
+  });
 });
 
+/**
+ * 从后端 /settings/ 接口获取快捷提问列表
+ * 快捷提问在欢迎界面展示，点击后直接发送
+ */
 async function loadQuickQuestions() {
   try {
-    const token = localStorage.getItem("token");
-    const { data } = await axios.get("/api/v1/settings/", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const { data } = await http.get("/settings/");
     quickQuestions.value = data.quick_questions || [];
   } catch (e) {
     console.error(e);
   }
 }
 
+/**
+ * 加载当前用户可见的知识库列表
+ * 后端根据角色过滤：admin/teacher 看全部，普通用户只看自己的
+ */
 async function loadKnowledgeBases() {
   try {
-    const token = localStorage.getItem("token");
-    const { data } = await axios.get("/api/v1/kb/", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const { data } = await http.get("/kb/");
     knowledgeBases.value = data || [];
     if (data.length > 0 && !selectedKB.value) {
       selectedKB.value = data[0].id;
@@ -227,18 +251,25 @@ async function loadKnowledgeBases() {
   }
 }
 
+/** 快捷提问：将问题填入输入框并触发发送 */
 async function sendQuick(q) {
   inputText.value = q;
   await handleSend();
 }
 
-const fileInput = ref(null);
-const uploadedFile = ref(null);
+/** 文件上传相关状态 */
+const fileInput = ref(null);          // 隐藏的 file input 引用
+const uploadedFile = ref(null);       // 当前已选择待发送的文件
 
+/** 触发隐藏 file input 的点击事件，弹出文件选择对话框 */
 function triggerFileUpload() {
   fileInput.value?.click();
 }
 
+/**
+ * 文件选择回调：暂存文件引用，显示文件标签
+ * 实际上传在发送时触发，这里只是预览
+ */
 async function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -249,6 +280,12 @@ async function handleFileUpload(event) {
   event.target.value = "";
 }
 
+/**
+ * 发送消息的核心逻辑
+ * 两种模式：纯文本发送 / 文件+文本混合发送
+ * 文件发送流程：先调用 /doc/multimodal 提取文本内容，再合并用户补充说明一起发送
+ * 发送到 chatStore，由 store 管理消息列表和加载状态
+ */
 async function handleSend() {
   const userText = inputText.value.trim();
   const hasFile = !!uploadedFile.value;
@@ -261,10 +298,9 @@ async function handleSend() {
     try {
       const formData = new FormData();
       formData.append("file", uploadedFile.value);
-      const token = localStorage.getItem("token");
       chatStore.loading = true;
-      const { data } = await axios.post("/api/v1/doc/multimodal", formData, {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+      const { data } = await http.post("/doc/multimodal", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
       chatStore.loading = false;
 
